@@ -75,9 +75,23 @@ def register_recipe_tools(mcp: FastMCP, client: MealieClient):
         return await client.get("/recipes", params={"page": page, "perPage": per_page})
 
     @mcp.tool()
-    async def create_recipe(name: str) -> dict:
-        """Create a new recipe with a given name."""
-        return await client.post("/recipes", {"name": name})
+    async def create_recipe(
+        name: str,
+        tags: Optional[list] = None,
+        recipeCategory: Optional[list] = None,
+    ) -> dict:
+        """Create a recipe and optionally assign complete Mealie tag/category objects."""
+        created = await client.post("/recipes", {"name": name})
+        if tags is None and recipeCategory is None:
+            return created
+
+        slug = created["slug"]
+        full_recipe = await client.get(f"/recipes/{slug}")
+        if tags is not None:
+            full_recipe["tags"] = tags
+        if recipeCategory is not None:
+            full_recipe["recipeCategory"] = recipeCategory
+        return await client.put(f"/recipes/{slug}", full_recipe)
 
     @mcp.tool()
     async def delete_recipe(slug: str) -> dict:
@@ -105,6 +119,8 @@ def register_recipe_tools(mcp: FastMCP, client: MealieClient):
         saturated_fat_content: Optional[str] = None,
         recipe_ingredient: Optional[list] = None,
         recipe_instructions: Optional[list] = None,
+        tags: Optional[list] = None,
+        recipeCategory: Optional[list] = None,
         show_nutrition: Optional[bool] = None,
         public: Optional[bool] = None,
         show_assets: Optional[bool] = None,
@@ -124,6 +140,8 @@ def register_recipe_tools(mcp: FastMCP, client: MealieClient):
           Pass ALL ingredients (unchanged ones too) — Mealie replaces the entire array.
 
         recipe_instructions items must have a 'text' field.
+        tags and recipeCategory accept complete organizer objects returned by Mealie.
+        Empty lists remove all associations.
         Settings fields: show_nutrition, public, show_assets, landscape_view,
           disable_comments, locked.
         """
@@ -174,16 +192,21 @@ def register_recipe_tools(mcp: FastMCP, client: MealieClient):
         if settings:
             patch_body["settings"] = settings
 
-        if recipe_ingredient is not None:
-            # GET the full recipe, resolve ingredient food/unit to complete objects,
-            # apply any other pending field changes, then PUT the whole thing back.
+        if recipe_ingredient is not None or tags is not None or recipeCategory is not None:
+            # GET the full recipe, resolve ingredient food/unit to complete objects when
+            # supplied, apply organizer and other pending changes, then PUT it back.
             # This mirrors what the Mealie frontend does and avoids the internal
             # ValidationError that Mealie throws when partial food/unit objects are
             # passed through PATCH's internal GET→merge→update cycle.
             full_recipe = await client.get(f"/recipes/{slug}")
 
-            resolved = [await _resolve_ingredient(i, client) for i in recipe_ingredient]
-            full_recipe["recipeIngredient"] = resolved
+            if recipe_ingredient is not None:
+                resolved = [await _resolve_ingredient(i, client) for i in recipe_ingredient]
+                full_recipe["recipeIngredient"] = resolved
+            if tags is not None:
+                full_recipe["tags"] = tags
+            if recipeCategory is not None:
+                full_recipe["recipeCategory"] = recipeCategory
 
             # Overlay any other field changes onto the full recipe
             full_recipe.update(patch_body)
@@ -206,4 +229,5 @@ def register_recipe_tools(mcp: FastMCP, client: MealieClient):
         """Parse free-text ingredient strings into structured food/unit/quantity objects.
         parser can be 'nlp' (default, English) or 'brute'.
         Example: ingredients=['200g chicken thigh', '2 tbsp soy sauce']"""
-        return await client.post("/parser/ingredients", {"parser": parser, "ingredients": ingredients})
+        parsed = await client.post("/parser/ingredients", {"parser": parser, "ingredients": ingredients})
+        return {"ingredients": parsed}
