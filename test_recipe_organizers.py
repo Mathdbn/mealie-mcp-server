@@ -1,5 +1,6 @@
 import asyncio
 import unittest
+from typing import Any
 
 from src.tools.recipes import register_recipe_tools
 
@@ -20,7 +21,7 @@ class FakeClient:
         self.calls = []
         self.recipe = {"slug": "test-recipe", "name": "Test recipe", "tags": [], "recipeCategory": []}
 
-    async def post(self, path, body):
+    async def post(self, path, body) -> Any:
         self.calls.append(("post", path, body))
         if path == "/parser/ingredients":
             return [{"quantity": 2.5, "unit": {"name": "cup"}}]
@@ -34,6 +35,14 @@ class FakeClient:
         self.calls.append(("put", path, body))
         self.recipe = dict(body)
         return dict(body)
+
+
+class StringSlugClient(FakeClient):
+    async def post(self, path, body) -> Any:
+        self.calls.append(("post", path, body))
+        if path == "/parser/ingredients":
+            return [{"quantity": 2.5, "unit": {"name": "cup"}}]
+        return "test-recipe"
 
 
 class RecipeOrganizerTests(unittest.TestCase):
@@ -72,6 +81,24 @@ class RecipeOrganizerTests(unittest.TestCase):
         self.assertEqual((method, path), ("put", "/recipes/test-recipe"))
         self.assertEqual(body["tags"], tags)
         self.assertEqual(body["recipeCategory"], categories)
+        self.assertEqual(result["tags"], tags)
+        self.assertEqual(result["recipeCategory"], categories)
+
+    def test_create_recipe_accepts_string_slug_response(self):
+        mcp = CaptureMCP()
+        client = StringSlugClient()
+        register_recipe_tools(mcp, client)  # type: ignore[arg-type]
+        tags = [{"id": "tag-id", "name": "Dessert", "slug": "dessert"}]
+        categories = [{"id": "category-id", "name": "Cakes", "slug": "cakes"}]
+
+        result = asyncio.run(mcp.tools["create_recipe"](
+            name="Test recipe",
+            tags=tags,
+            recipeCategory=categories,
+        ))
+
+        self.assertEqual(client.calls[1][0:2], ("get", "/recipes/test-recipe"))
+        self.assertEqual(client.calls[2][0:2], ("put", "/recipes/test-recipe"))
         self.assertEqual(result["tags"], tags)
         self.assertEqual(result["recipeCategory"], categories)
 

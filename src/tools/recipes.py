@@ -85,7 +85,7 @@ def register_recipe_tools(mcp: FastMCP, client: MealieClient):
         if tags is None and recipeCategory is None:
             return created
 
-        slug = created["slug"]
+        slug = created if isinstance(created, str) else created["slug"]
         full_recipe = await client.get(f"/recipes/{slug}")
         if tags is not None:
             full_recipe["tags"] = tags
