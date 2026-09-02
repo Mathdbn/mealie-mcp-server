@@ -45,6 +45,20 @@ class StringSlugClient(FakeClient):
         return "test-recipe"
 
 
+class MissingFoodClient(FakeClient):
+    async def get(self, path, params=None):
+        self.calls.append(("get", path, params))
+        if path == "/foods":
+            return {"items": []}
+        return dict(self.recipe)
+
+    async def post(self, path, body) -> Any:
+        self.calls.append(("post", path, body))
+        if path == "/foods":
+            return {"id": "food-id", "name": body["name"], "createdAt": "2026-09-02T00:00:00Z"}
+        return await super().post(path, body)
+
+
 class RecipeOrganizerTests(unittest.TestCase):
     def setUp(self):
         self.mcp = CaptureMCP()
@@ -101,6 +115,26 @@ class RecipeOrganizerTests(unittest.TestCase):
         self.assertEqual(client.calls[2][0:2], ("put", "/recipes/test-recipe"))
         self.assertEqual(result["tags"], tags)
         self.assertEqual(result["recipeCategory"], categories)
+
+    def test_update_recipe_creates_missing_parser_food(self):
+        mcp = CaptureMCP()
+        client = MissingFoodClient()
+        register_recipe_tools(mcp, client)  # type: ignore[arg-type]
+        ingredient = {
+            "quantity": 125,
+            "unit": {"id": "unit-id", "name": "gram", "createdAt": "2026-09-02T00:00:00Z"},
+            "food": {"id": None, "name": "flour"},
+        }
+
+        asyncio.run(mcp.tools["update_recipe"](
+            slug="test-recipe",
+            recipe_ingredient=[ingredient],
+        ))
+
+        self.assertIn(("get", "/foods", {"search": "flour", "page": 1, "perPage": 100}), client.calls)
+        self.assertIn(("post", "/foods", {"name": "flour"}), client.calls)
+        put_body = next(body for method, path, body in client.calls if method == "put" and path == "/recipes/test-recipe")
+        self.assertEqual(put_body["recipeIngredient"][0]["food"]["id"], "food-id")
 
     def test_parse_ingredients_wraps_list_in_declared_object(self):
         result = asyncio.run(self.mcp.tools["parse_ingredients"](
