@@ -230,4 +230,5 @@ def register_recipe_tools(mcp: FastMCP, client: MealieClient):
         parser can be 'nlp' (default, English) or 'brute'.
         Example: ingredients=['200g chicken thigh', '2 tbsp soy sauce']"""
         parsed = await client.post("/parser/ingredients", {"parser": parser, "ingredients": ingredients})
-        return {"ingredients": parsed}
+        flattened = [item.get("ingredient", item) for item in parsed]
+        return {"ingredients": flattened}
