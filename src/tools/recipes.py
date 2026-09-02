@@ -27,8 +27,16 @@ async def _resolve_ingredient(ingredient: dict, client: MealieClient) -> dict:
         if food_id and "createdAt" not in food:
             # Partial object (e.g. {id, name}) — fetch full object from API
             result["food"] = await client.get(f"/foods/{food_id}")
-        else:
+        elif food_id:
             result["food"] = food  # already a full passthrough object
+        elif food.get("name"):
+            name = food["name"]
+            matches = await client.get("/foods", params={"search": name, "page": 1, "perPage": 100})
+            items = matches if isinstance(matches, list) else matches.get("items", [])
+            existing = next((item for item in items if item.get("name", "").casefold() == name.casefold()), None)
+            result["food"] = existing or await client.post("/foods", {"name": name})
+        else:
+            result["food"] = None
     else:
         result["food"] = None
 
