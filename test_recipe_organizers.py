@@ -24,7 +24,7 @@ class FakeClient:
     async def post(self, path, body) -> Any:
         self.calls.append(("post", path, body))
         if path == "/parser/ingredients":
-            return [{"quantity": 2.5, "unit": {"name": "cup"}}]
+            return [{"ingredient": {"quantity": 2.5, "unit": {"name": "cup"}}}]
         return {"slug": "test-recipe", "name": body["name"]}
 
     async def get(self, path, params=None):
@@ -41,7 +41,7 @@ class StringSlugClient(FakeClient):
     async def post(self, path, body) -> Any:
         self.calls.append(("post", path, body))
         if path == "/parser/ingredients":
-            return [{"quantity": 2.5, "unit": {"name": "cup"}}]
+            return [{"ingredient": {"quantity": 2.5, "unit": {"name": "cup"}}}]
         return "test-recipe"
 
 
